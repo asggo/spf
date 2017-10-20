@@ -17,16 +17,7 @@ Mechanism represents a single mechanism in an SPF record.
 	Prefix string
     }
 
-func NewMechanism
------------------
-
-    func NewMechanism(str, domain string) *Mechanism
-
-NewMechanism creates a new Mechanism struct using the given string and
-domain name. When the mechanism does not define the domain, the provided
-domain is used as the default.
-
-func (Mechanism) String()
+func (*Mechanism) String()
 -------------------------
 
     func (m *Mechanism) String() string
@@ -68,7 +59,14 @@ func NetworkCIDR
 
 Create a new net.IPNet object using the given IP address and mask.
 
+func NewMechanism
+-----------------
 
+    func NewMechanism(str, domain string) *Mechanism
+
+NewMechanism creates a new Mechanism struct using the given string and
+domain name. When the mechanism does not define the domain, the provided
+domain is used as the default.
 
 func NewSPFDomain
 -----------------
