@@ -12,11 +12,16 @@ import (
 	"strings"
 )
 
+/*
+* Mechanism struct and associated methods.
+ */
+
 // Mechanism represents a single mechanism in an SPF record.
 type Mechanism struct {
 	Name   string
 	Domain string
 	Prefix string
+	Result string
 }
 
 // Return a Mechanism as a string
@@ -33,86 +38,138 @@ func (m *Mechanism) String() string {
 		buf.WriteString(fmt.Sprintf("/%s", m.Prefix))
 	}
 
+	buf.WriteString(fmt.Sprintf(" - %s", m.Result))
+
 	return buf.String()
+}
+
+// Ensure the mechanism is valid
+func (m *Mechanism) Valid() bool {
+	var result bool
+	var name bool
+	var ip bool
+
+	switch m.Result {
+	case "Pass", "Fail", "SoftFail", "Neutral":
+		result = true
+	default:
+		result = false
+	}
+
+	switch m.Name {
+	case "all", "a", "mx", "ip4", "ip6", "exists", "include", "ptr":
+		name = true
+	default:
+		name = false
+	}
+
+	ip = true
+	if m.Name == "ip4" || m.Name == "ip6" {
+		valid := net.ParseIP(m.Domain)
+		ip = (valid != nil)
+	}
+
+	return result && name && ip
+}
+
+// Evaluate determines if the given IP address is covered by the mechanism.
+// If the IP is covered, the mechanism result is returned and error is nil.
+// If the IP is not covered an error is returned. The caller must check for
+// the error to determine if the result is valid.
+func (m *Mechanism) Evaluate(client string) (string, error) {
+
+	clientIP := net.ParseIP(client)
+
+	switch m.Name {
+	case "all":
+		return m.Result, nil
+	case "exists":
+		_, err := net.LookupHost(m.Domain)
+		if err == nil {
+			return m.Result, nil
+		}
+	case "include":
+		email := "info@" + m.Domain
+		return SPFTest(client, email)
+	case "a":
+		networks := aNetworks(m)
+		if ipInNetworks(clientIP, networks) {
+			return m.Result, nil
+		}
+	case "mx":
+		networks := mxNetworks(m)
+		if ipInNetworks(clientIP, networks) {
+			return m.Result, nil
+		}
+	case "ptr":
+		if testPTR(m, client) {
+			return m.Result, nil
+		}
+	default:
+		network, err := networkCIDR(m.Domain, m.Prefix)
+		if err == nil {
+			if network.Contains(clientIP) {
+				return m.Result, nil
+			}
+		}
+	}
+
+	return "", errors.New("Client was not covered by the mechanism.")
 }
 
 // NewMechanism creates a new Mechanism struct using the given string and
 // domain name. When the mechanism does not define the domain, the provided
 // domain is used as the default.
 func NewMechanism(str, domain string) *Mechanism {
-	t := new(Mechanism)
-	ci := strings.Index(str, ":")
-	pi := strings.Index(str, "/")
+	m := new(Mechanism)
 
-	switch {
-	case ci != -1 && pi != -1: // name:domain/prefix
-		t.Name = str[:ci]
-		t.Domain = str[ci+1 : pi]
-		t.Prefix = str[pi+1:]
-	case ci != -1: // name:domain
-		t.Name = str[:ci]
-		t.Domain = str[ci+1:]
-	case pi != -1: // name/prefix
-		t.Name = str[:pi]
-		t.Domain = domain
-		t.Prefix = str[pi+1:]
-	default: // name
-		t.Name = str
-		t.Domain = domain
+	switch string(str[0]) {
+	case "-":
+		m.Result = "Fail"
+		parseMechanism(str[1:], domain, m)
+	case "~":
+		m.Result = "SoftFail"
+		parseMechanism(str[1:], domain, m)
+	case "+":
+		m.Result = "Pass"
+		parseMechanism(str[1:], domain, m)
+	case "?":
+		m.Result = "Neutral"
+		parseMechanism(str[1:], domain, m)
+	default:
+		m.Result = "Pass"
+		parseMechanism(str, domain, m)
 	}
 
-	return t
+	return m
 }
+
+/*
+ SPF Struct and associated methods.
+*/
 
 // SPF represents an SPF record for a particular Domain. The SPF record
 // holds all of the Allow, Deny, and Neutral mechanisms.
 type SPF struct {
-	Raw     string
-	Domain  string
-	Version string
-	Allow   []*Mechanism
-	Deny    []*Mechanism
-	Neutral []*Mechanism
+	Raw        string
+	Domain     string
+	Version    string
+	Mechanisms []*Mechanism
 }
 
-// Determine if an IP address is allowed to send email.
-func (s *SPF) Allowed(client string) (bool, error) {
-	allowed := false
-	clientIP := net.ParseIP(client)
-
-	for _, m := range s.Allow {
-		switch m.Name {
-		case "all":
-			allowed = true
-		case "exists":
-			_, err := net.LookupHost(s.Domain)
-			allowed = (err == nil)
-		case "include":
-			spf, err := NewSPFDomain(m.Domain)
-			if err == nil {
-				allowed, err = spf.Allowed(client)
-			}
-		case "a":
-			networks := aNetworks(m)
-			allowed = ipInNetworks(clientIP, networks)
-		case "mx":
-			networks := mxNetworks(m)
-			allowed = ipInNetworks(clientIP, networks)
-		case "ptr":
-			allowed = testPTR(m, client)
-		default:
-			network, err := NetworkCIDR(m.Domain, m.Prefix)
-			if err == nil {
-				allowed = network.Contains(clientIP)
-			}
-		}
-
-		if allowed {
-			return true, nil
+// Test evaluates each mechanism to determine the result for the client.
+// Mechanisms are evaluated in order until one of them provides a valid
+// result. If no valid results are provided, the default result of "Neutral"
+// is returned.
+func (s *SPF) Test(client string) string {
+	for _, m := range s.Mechanisms {
+		result, err := m.Evaluate(client)
+		if err == nil {
+			return result
 		}
 	}
 
-	return false, nil
+	return "Neutral"
 }
 
 // Return an SPF record as a string.
@@ -123,73 +180,119 @@ func (s *SPF) String() string {
 	buf.WriteString(fmt.Sprintf("Domain: %s\n", s.Domain))
 	buf.WriteString(fmt.Sprintf("Version: %s\n", s.Version))
 
-	buf.WriteString("Allow:\n")
-	for _, a := range s.Allow {
-		buf.WriteString(fmt.Sprintf("\t%s\n", a.String()))
-	}
-
-	buf.WriteString("Deny:\n")
-	for _, a := range s.Deny {
-		buf.WriteString(fmt.Sprintf("\t%s\n", a.String()))
-	}
-
-	buf.WriteString("Neutral:\n")
-	for _, a := range s.Neutral {
-		buf.WriteString(fmt.Sprintf("\t%s\n", a.String()))
+	buf.WriteString("Mechanisms:\n")
+	for _, m := range s.Mechanisms {
+		buf.WriteString(fmt.Sprintf("\t%s\n", m.String()))
 	}
 
 	return buf.String()
 }
 
-// Create a new SPF record using a domain name. If no SPF record is found for
-// the given domain an error is returned.
-func NewSPFDomain(domain string) (*SPF, error) {
-	spf := new(SPF)
-
-	records, _ := net.LookupTXT(domain)
-
-	for _, record := range records {
-		if strings.HasPrefix(record, "v=spf1") {
-			return NewSPFString(domain, record)
-		}
-	}
-
-	return spf, errors.New(fmt.Sprintf("No SPF record for domain: %s", domain))
-}
-
-
 // Create a new SPF record for the given domain using the provided string. If
 // the provided string is not valid an error is returned.
-func NewSPFString(domain, record string) (*SPF, error) {
+func NewSPF(domain, record string) (*SPF, error) {
 	spf := new(SPF)
+
 	spf.Raw = record
+	spf.Domain = domain
 
 	if !strings.HasPrefix(record, "v=spf1") {
 		return spf, errors.New(fmt.Sprintf("Invalid SPF string: %s", record))
 	}
 
-	spf.Domain = domain
-
 	for _, f := range strings.Fields(record) {
 		switch {
 		case strings.HasPrefix(f, "v="):
 			spf.Version = f[2:]
-		case strings.HasPrefix(f, "-"):
-			spf.Deny = append(spf.Deny, NewMechanism(f[1:], domain))
-		case strings.HasPrefix(f, "~"):
-			spf.Neutral = append(spf.Neutral, NewMechanism(f[1:], domain))
-		case strings.HasPrefix(f, "+"):
-			spf.Allow = append(spf.Allow, NewMechanism(f[1:], domain))
 		default:
-			spf.Allow = append(spf.Allow, NewMechanism(f, domain))
+			mechanism := NewMechanism(f, domain)
+
+			if !mechanism.Valid() {
+				return spf, errors.New(fmt.Sprintf("Invalid mechanism in SPF string: %s", f))
+			}
+
+			spf.Mechanisms = append(spf.Mechanisms, mechanism)
 		}
 	}
 
 	return spf, nil
 }
 
-// Create a new net.IPNet object using the given IP address and mask.  
-func NetworkCIDR(addr, prefix string) (*net.IPNet, error) {
+/*
+Exported functions.
+*/
+
+// SPFTest determines the clients sending status for the given email addres.
+//
+// SPFTest will return one of the following results:
+// Pass, Fail, SoftFail, Neutral, None, TempError, or PermError
+func SPFTest(client, email string) (string, error) {
+	var domain string
+	var spfText string
+
+	// Get domain name from email address.
+	if strings.Contains(email, "@") {
+		parts := strings.Split(email, "@")
+		domain = parts[1]
+	} else {
+		return "", errors.New("Email address must contain an @ sign.")
+	}
+
+	// DNS errors during domain name lookup should result in "TempError".
+	records, err := net.LookupTXT(domain)
+	if err != nil {
+		return "TempError", nil
+	}
+
+	// Find the SPF record among the TXT records for the domain.
+	for _, record := range records {
+		if strings.HasPrefix(record, "v=spf1") {
+			spfText = record
+			break
+		}
+	}
+
+	// No SPF record should result in None.
+	if spfText == "" {
+		return "None", nil
+	}
+
+	// Create a new SPF struct
+	spf, err := NewSPF(domain, spfText)
+	if err != nil {
+		return "PermError", err
+	}
+
+	return spf.Test(client), nil
+}
+
+/*
+Unexported supporting functions.
+*/
+
+func parseMechanism(str, domain string, m *Mechanism) {
+	ci := strings.Index(str, ":")
+	pi := strings.Index(str, "/")
+
+	switch {
+	case ci != -1 && pi != -1: // name:domain/prefix
+		m.Name = str[:ci]
+		m.Domain = str[ci+1 : pi]
+		m.Prefix = str[pi+1:]
+	case ci != -1: // name:domain
+		m.Name = str[:ci]
+		m.Domain = str[ci+1:]
+	case pi != -1: // name/prefix
+		m.Name = str[:pi]
+		m.Domain = domain
+		m.Prefix = str[pi+1:]
+	default: // name
+		m.Name = str
+		m.Domain = domain
+	}
+}
+
+func networkCIDR(addr, prefix string) (*net.IPNet, error) {
 	if prefix == "" {
 		ip := net.ParseIP(addr)
 
@@ -215,13 +318,11 @@ func ipInNetworks(client net.IP, networks []*net.IPNet) bool {
 	return false
 }
 
-func aNetworks(term *Mechanism) []*net.IPNet {
+func buildNetworks(ips []string, prefix string) []*net.IPNet {
 	var networks []*net.IPNet
 
-	ips, _ := net.LookupHost(term.Domain)
-
 	for _, ip := range ips {
-		network, err := NetworkCIDR(ip, term.Prefix)
+		network, err := networkCIDR(ip, prefix)
 		if err == nil {
 			networks = append(networks, network)
 		}
@@ -230,26 +331,26 @@ func aNetworks(term *Mechanism) []*net.IPNet {
 	return networks
 }
 
-func mxNetworks(term *Mechanism) []*net.IPNet {
+func aNetworks(m *Mechanism) []*net.IPNet {
+	ips, _ := net.LookupHost(m.Domain)
+
+	return buildNetworks(ips, m.Prefix)
+}
+
+func mxNetworks(m *Mechanism) []*net.IPNet {
 	var networks []*net.IPNet
 
-	mxs, _ := net.LookupMX(term.Domain)
+	mxs, _ := net.LookupMX(m.Domain)
 
 	for _, mx := range mxs {
 		ips, _ := net.LookupHost(mx.Host)
-
-		for _, ip := range ips {
-			network, err := NetworkCIDR(ip, term.Prefix)
-			if err == nil {
-				networks = append(networks, network)
-			}
-		}
+		networks = append(networks, buildNetworks(ips, m.Prefix)...)
 	}
 
 	return networks
 }
 
-func testPTR(term *Mechanism, client string) bool {
+func testPTR(m *Mechanism, client string) bool {
 	names, err := net.LookupAddr(client)
 
 	if err != nil {
@@ -257,7 +358,7 @@ func testPTR(term *Mechanism, client string) bool {
 	}
 
 	for _, name := range names {
-		if strings.HasSuffix(name, term.Domain) {
+		if strings.HasSuffix(name, m.Domain) {
 			return true
 		}
 	}
