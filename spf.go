@@ -241,7 +241,7 @@ func SPFTest(client, email string) (string, error) {
 	// DNS errors during domain name lookup should result in "TempError".
 	records, err := net.LookupTXT(domain)
 	if err != nil {
-		return "TempError", nil
+		return "TempError", err
 	}
 
 	// Find the SPF record among the TXT records for the domain.
