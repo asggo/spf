@@ -211,6 +211,12 @@ func NewSPF(domain, record string) (*SPF, error) {
 				return spf, errors.New(fmt.Sprintf("Invalid mechanism in SPF string: %s", f))
 			}
 
+			if mechanism.Name == "include" {
+				if mechanism.Domain == domain {
+					return spf, fmt.Errorf("include loop detected")
+				}
+			}
+
 			spf.Mechanisms = append(spf.Mechanisms, mechanism)
 		}
 	}
