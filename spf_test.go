@@ -25,6 +25,11 @@ type spftest struct {
 	result string
 }
 
+type spfstr struct {
+	raw      string
+	expected string
+}
+
 func TestNewMechanism(t *testing.T) {
 	tests := []mechtest{
 		mechtest{"+all", "all", domain, "", "Pass"},
@@ -93,6 +98,31 @@ func TestSPFTest(t *testing.T) {
 
 		if actual != expected.result {
 			t.Error("Expected", expected.result, "got", actual)
+		}
+	}
+}
+
+func TestSPFString(t *testing.T) {
+	tests := []spfstr{
+		spfstr{
+			"v=spf1 ip4:45.55.100.54 ip4:192.241.161.190 ip4:188.226.145.26 ~all",
+			"v=spf1 ip4:45.55.100.54 ip4:192.241.161.190 ip4:188.226.145.26 ~all",
+		},
+		spfstr{
+			"v=spf1 ip4:127.0.0.0/8 -ip4:127.0.0.1 ?ip4:127.0.0.2 -all",
+			"v=spf1 ip4:127.0.0.0/8 -ip4:127.0.0.1 ?ip4:127.0.0.2 -all",
+		},
+	}
+
+	for _, tcase := range tests {
+		s, err := NewSPF("domain", tcase.raw)
+		if err != nil {
+			t.Error(err)
+		}
+
+		r := s.SPFString()
+		if r != tcase.expected {
+			t.Error("Expected", tcase.expected, "got", r)
 		}
 	}
 }

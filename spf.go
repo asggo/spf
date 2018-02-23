@@ -43,6 +43,48 @@ func (m *Mechanism) String() string {
 	return buf.String()
 }
 
+// ResultTag maps the Result code to a suitable char
+func (m *Mechanism) ResultTag() string {
+	switch m.Result {
+	case "Fail":
+		return "-"
+	case "SoftFail":
+		return "~"
+	case "Pass":
+		return "+"
+	case "Neutral":
+		return "?"
+	}
+
+	return "+"
+}
+
+// SPFString return a string representation of a mechanism, suitable for using
+// in a TXT record.
+func (m *Mechanism) SPFString() string {
+	var buf bytes.Buffer
+
+	tag := m.ResultTag()
+
+	if m.Name != "all" && tag != "+" {
+		buf.WriteString(tag)
+	} else if m.Name == "all" {
+		buf.WriteString(tag)
+	}
+
+	buf.WriteString(m.Name)
+
+	if len(m.Domain) != 0 && m.Name != "all" {
+		buf.WriteString(fmt.Sprintf(":%s", m.Domain))
+	}
+
+	if len(m.Prefix) != 0 {
+		buf.WriteString(fmt.Sprintf("/%s", m.Prefix))
+	}
+
+	return buf.String()
+}
+
 // Ensure the mechanism is valid
 func (m *Mechanism) Valid() bool {
 	var result bool
@@ -183,6 +225,19 @@ func (s *SPF) String() string {
 	buf.WriteString("Mechanisms:\n")
 	for _, m := range s.Mechanisms {
 		buf.WriteString(fmt.Sprintf("\t%s\n", m.String()))
+	}
+
+	return buf.String()
+}
+
+// SPFString returns a formatted SPF object as a string suitable for use in a
+// TXT record.
+func (s *SPF) SPFString() string {
+	var buf bytes.Buffer
+
+	buf.WriteString(fmt.Sprintf("v=%s", s.Version))
+	for _, m := range s.Mechanisms {
+		buf.WriteString(fmt.Sprintf(" %s", m.SPFString()))
 	}
 
 	return buf.String()
