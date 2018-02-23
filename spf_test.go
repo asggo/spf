@@ -68,6 +68,7 @@ func TestNewSPF(t *testing.T) {
 	errorTests := []spferror{
 		spferror{"google.com", "somestring"},
 		spferror{"google.com", "v=spf1 include:_spf.google.com ~all -none"},
+		spferror{"google.com", "v=spf1 include:google.com"},
 	}
 
 	for _, expected := range errorTests {
