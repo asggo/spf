@@ -15,6 +15,7 @@ Mechanism represents a single mechanism in an SPF record.
 	Name   string
 	Domain string
 	Prefix string
+  Result string
     }
 
 func (*Mechanism) String()
@@ -24,18 +25,30 @@ func (*Mechanism) String()
 
 Return a Mechanism as a string
 
+func (*Mechanism) ResultTag()
+-----------------------------
+
+    func (m *Mechanism) ResultTag() string
+
+Returns the sigil that describes the result of this mechanism (i.e., "+" for "Pass", etc.)
+
+func (m *Mechanism) SPFString()
+-------------------------------
+
+    func (m *Mechanism) SPFString() string
+
+Returns a string representation of the mechanism in a format suitable for addition to a SPF record in the DNS.
+
 type SPF
 --------
 SPF represents an SPF record for a particular Domain. The SPF record
-holds all of the Allow, Deny, and Neutral mechanisms.
+holds all of the mechanisms describing the policy.
 
     type SPF struct {
-        Raw     string
-        Domain  string
-        Version string
-        Allow   []*Mechanism
-        Deny    []*Mechanism
-        Neutral []*Mechanism
+        Raw          string
+        Domain       string
+        Version      string
+        Mechanisms   []*Mechanism
     }
 
 func (*SPF) Allowed
@@ -51,6 +64,13 @@ func (*SPF) String
     func (s *SPF) String() string
 
 Return an SPF record as a string.
+
+func (s *SPF) SPFString()
+-------------------------
+
+    func (s *SPF) SPFString() string
+
+Returns a DNS record - compatible representation of the SPF policy described by the SPF object.
 
 func NetworkCIDR
 ----------------
@@ -83,6 +103,3 @@ func NewSPFString
 
 Create a new SPF record for the given domain using the provided string.
 If the provided string is not valid an error is returned.
-
-
-
