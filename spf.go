@@ -25,9 +25,9 @@ type SPF struct {
 // Mechanisms are evaluated in order until one of them provides a valid
 // result. If no valid results are provided, the default result of "Neutral"
 // is returned.
-func (s *SPF) Test(client string) ResultType {
+func (s *SPF) Test(ip string) Result {
 	for _, m := range s.Mechanisms {
-		result, err := m.Evaluate(client)
+		result, err := m.Evaluate(ip)
 		if err == nil {
 			return result
 		}
@@ -109,7 +109,7 @@ Exported functions.
 //
 // SPFTest will return one of the following results:
 // Pass, Fail, SoftFail, Neutral, None, TempError, or PermError
-func SPFTest(client, email string) (ResultType, error) {
+func SPFTest(ip, email string) (Result, error) {
 	var domain string
 	var spfText string
 
@@ -146,5 +146,5 @@ func SPFTest(client, email string) (ResultType, error) {
 		return PermError, err
 	}
 
-	return spf.Test(client), nil
+	return spf.Test(ip), nil
 }

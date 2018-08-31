@@ -11,7 +11,7 @@ type mechtest struct {
 	name   string
 	domain string
 	prefix string
-	result ResultType
+	result Result
 }
 
 type spferror struct {
@@ -22,7 +22,7 @@ type spferror struct {
 type spftest struct {
 	server string
 	email  string
-	result ResultType
+	result Result
 }
 
 type spfstr struct {

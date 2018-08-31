@@ -6,9 +6,9 @@ import (
 	"strings"
 )
 
-func networkCIDR(addr, prefix string) (*net.IPNet, error) {
+func networkCIDR(ip, prefix string) (*net.IPNet, error) {
 	if prefix == "" {
-		ip := net.ParseIP(addr)
+		ip := net.ParseIP(ip)
 
 		if ip.To4() != nil {
 			prefix = "32"
@@ -17,15 +17,15 @@ func networkCIDR(addr, prefix string) (*net.IPNet, error) {
 		}
 	}
 
-	cidrStr := fmt.Sprintf("%s/%s", addr, prefix)
+	cidrStr := fmt.Sprintf("%s/%s", ip, prefix)
 
 	_, network, err := net.ParseCIDR(cidrStr)
 	return network, err
 }
 
-func ipInNetworks(client net.IP, networks []*net.IPNet) bool {
+func ipInNetworks(ip net.IP, networks []*net.IPNet) bool {
 	for _, network := range networks {
-		if network.Contains(client) {
+		if network.Contains(ip) {
 			return true
 		}
 	}
@@ -65,8 +65,8 @@ func mxNetworks(m *Mechanism) []*net.IPNet {
 	return networks
 }
 
-func testPTR(m *Mechanism, client string) bool {
-	names, err := net.LookupAddr(client)
+func testPTR(m *Mechanism, ip string) bool {
+	names, err := net.LookupAddr(ip)
 
 	if err != nil {
 		return false

@@ -8,16 +8,16 @@ import (
 	"strings"
 )
 
-type ResultType string
+type Result string
 
 const (
-	Pass      ResultType = "pass"
-	Neutral   ResultType = "neutral"
-	Fail      ResultType = "fail"
-	SoftFail  ResultType = "softfail"
-	None      ResultType = "none"
-	TempError ResultType = "temperror"
-	PermError ResultType = "permerror"
+	Pass      Result = "Pass"
+	Neutral   Result = "Neutral"
+	Fail      Result = "Fail"
+	SoftFail  Result = "SoftFail"
+	None      Result = "None"
+	TempError Result = "TempError"
+	PermError Result = "PermError"
 )
 
 // Mechanism represents a single mechanism in an SPF record.
@@ -25,7 +25,7 @@ type Mechanism struct {
 	Name   string
 	Domain string
 	Prefix string
-	Result ResultType
+	Result Result
 }
 
 // Return a Mechanism as a string
@@ -91,40 +91,40 @@ func (m *Mechanism) SPFString() string {
 
 // Ensure the mechanism is valid
 func (m *Mechanism) Valid() bool {
-	var result bool
-	var name bool
-	var ip bool
+	var hasResult bool
+	var hasName bool
+	var isIP bool
 
 	switch m.Result {
 	case Pass, Fail, SoftFail, Neutral:
-		result = true
+		hasResult = true
 	default:
-		result = false
+		hasResult = false
 	}
 
 	switch m.Name {
 	case "all", "a", "mx", "ip4", "ip6", "exists", "include", "ptr":
-		name = true
+		hasName = true
 	default:
-		name = false
+		hasName = false
 	}
 
-	ip = true
+	isIP = true
 	if m.Name == "ip4" || m.Name == "ip6" {
 		valid := net.ParseIP(m.Domain)
-		ip = (valid != nil)
+		isIP = (valid != nil)
 	}
 
-	return result && name && ip
+	return hasResult && hasName && isIP
 }
 
 // Evaluate determines if the given IP address is covered by the mechanism.
 // If the IP is covered, the mechanism result is returned and error is nil.
 // If the IP is not covered an error is returned. The caller must check for
 // the error to determine if the result is valid.
-func (m *Mechanism) Evaluate(client string) (ResultType, error) {
+func (m *Mechanism) Evaluate(ip string) (Result, error) {
 
-	clientIP := net.ParseIP(client)
+	parsedIP := net.ParseIP(ip)
 
 	switch m.Name {
 	case "all":
@@ -136,25 +136,25 @@ func (m *Mechanism) Evaluate(client string) (ResultType, error) {
 		}
 	case "include":
 		email := "info@" + m.Domain
-		return SPFTest(client, email)
+		return SPFTest(ip, email)
 	case "a":
 		networks := aNetworks(m)
-		if ipInNetworks(clientIP, networks) {
+		if ipInNetworks(parsedIP, networks) {
 			return m.Result, nil
 		}
 	case "mx":
 		networks := mxNetworks(m)
-		if ipInNetworks(clientIP, networks) {
+		if ipInNetworks(parsedIP, networks) {
 			return m.Result, nil
 		}
 	case "ptr":
-		if testPTR(m, client) {
+		if testPTR(m, ip) {
 			return m.Result, nil
 		}
 	default:
 		network, err := networkCIDR(m.Domain, m.Prefix)
 		if err == nil {
-			if network.Contains(clientIP) {
+			if network.Contains(parsedIP) {
 				return m.Result, nil
 			}
 		}
