@@ -10,8 +10,9 @@ func networkCIDR(addr, prefix string) (*net.IPNet, error) {
 	if prefix == "" {
 		ip := net.ParseIP(addr)
 
-		prefix = "32"
-		if len(ip) == 8 {
+		if ip.To4() != nil {
+			prefix = "32"
+		} else {
 			prefix = "128"
 		}
 	}
