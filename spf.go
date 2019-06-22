@@ -16,14 +16,6 @@ import (
 * Mechanism struct and associated methods.
  */
 
-// Mechanism represents a single mechanism in an SPF record.
-type Mechanism struct {
-	Name   string
-	Domain string
-	Prefix string
-	Result string
-}
-
 // Return a Mechanism as a string
 func (m *Mechanism) String() string {
 	var buf bytes.Buffer
@@ -74,8 +66,15 @@ func (m *Mechanism) SPFString() string {
 
 	buf.WriteString(m.Name)
 
-	if len(m.Domain) != 0 && m.Name != "all" {
-		buf.WriteString(fmt.Sprintf(":%s", m.Domain))
+	if len(m.Domain) != 0 {
+		switch {
+		case m.Name == "redirect":
+			buf.WriteString(fmt.Sprintf("=%s", m.Domain))
+		case m.Name == "all":
+			// Do nothing
+		default:
+			buf.WriteString(fmt.Sprintf(":%s", m.Domain))
+		}
 	}
 
 	if len(m.Prefix) != 0 {
@@ -99,7 +98,7 @@ func (m *Mechanism) Valid() bool {
 	}
 
 	switch m.Name {
-	case "all", "a", "mx", "ip4", "ip6", "exists", "include", "ptr":
+	case "all", "a", "mx", "ip4", "ip6", "exists", "include", "ptr", "redirect":
 		name = true
 	default:
 		name = false
@@ -147,6 +146,8 @@ func (m *Mechanism) Evaluate(client string) (string, error) {
 		if testPTR(m, client) {
 			return m.Result, nil
 		}
+	case "redirect":
+		return "", errors.New("redirect mechanism is not fully supported.")
 	default:
 		network, err := networkCIDR(m.Domain, m.Prefix)
 		if err == nil {
@@ -189,15 +190,6 @@ func NewMechanism(str, domain string) *Mechanism {
 /*
  SPF Struct and associated methods.
 */
-
-// SPF represents an SPF record for a particular Domain. The SPF record
-// holds all of the Allow, Deny, and Neutral mechanisms.
-type SPF struct {
-	Raw        string
-	Domain     string
-	Version    string
-	Mechanisms []*Mechanism
-}
 
 // Test evaluates each mechanism to determine the result for the client.
 // Mechanisms are evaluated in order until one of them provides a valid
@@ -333,7 +325,10 @@ Unexported supporting functions.
 
 func parseMechanism(str, domain string, m *Mechanism) {
 	ci := strings.Index(str, ":")
+	ei := strings.Index(str, "=")
 	pi := strings.Index(str, "/")
+
+	fmt.Printf("str=%s domain=%s (ci=%d ei=%d pi=%d)\n", str, domain, ci, ei, pi)
 
 	switch {
 	case ci != -1 && pi != -1: // name:domain/prefix
@@ -347,6 +342,9 @@ func parseMechanism(str, domain string, m *Mechanism) {
 		m.Name = str[:pi]
 		m.Domain = domain
 		m.Prefix = str[pi+1:]
+	case ci == -1 && pi == -1 && ei != -1: // tag=value
+		m.Name = str[:ei]
+		m.Domain = str[ei+1:]
 	default: // name
 		m.Name = str
 		m.Domain = domain

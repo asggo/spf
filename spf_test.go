@@ -113,6 +113,10 @@ func TestSPFString(t *testing.T) {
 			"v=spf1 ip4:127.0.0.0/8 -ip4:127.0.0.1 ?ip4:127.0.0.2 -all",
 			"v=spf1 ip4:127.0.0.0/8 -ip4:127.0.0.1 ?ip4:127.0.0.2 -all",
 		},
+		spfstr{
+			"v=spf1 redirect=_spf.sample.invalid",
+			"v=spf1 redirect=_spf.sample.invalid",
+		},
 	}
 
 	for _, tcase := range tests {
