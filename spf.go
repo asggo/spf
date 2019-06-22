@@ -328,8 +328,6 @@ func parseMechanism(str, domain string, m *Mechanism) {
 	ei := strings.Index(str, "=")
 	pi := strings.Index(str, "/")
 
-	fmt.Printf("str=%s domain=%s (ci=%d ei=%d pi=%d)\n", str, domain, ci, ei, pi)
-
 	switch {
 	case ci != -1 && pi != -1: // name:domain/prefix
 		m.Name = str[:ci]
