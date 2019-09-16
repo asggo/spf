@@ -1,5 +1,7 @@
 package spf
 
+import "errors"
+
 // Mechanism represents a single mechanism in an SPF record.
 type Mechanism struct {
 	Name   string
@@ -16,3 +18,7 @@ type SPF struct {
 	Version    string
 	Mechanisms []*Mechanism
 }
+
+// ErrPermFail is a special error triggered by malformed SPF records as per
+// RFC-7208 § 4.6
+var ErrPermFail = errors.New("ErrPermFail: Invalid SPF record")

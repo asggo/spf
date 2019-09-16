@@ -127,7 +127,7 @@ func (m *Mechanism) Evaluate(client string) (string, error) {
 	case "exists":
 		_, err := net.LookupHost(m.Domain)
 		if err == nil {
-			return m.Result, nil
+			return m.mechReturn()
 		}
 	case "include":
 		email := "info@" + m.Domain
@@ -135,16 +135,16 @@ func (m *Mechanism) Evaluate(client string) (string, error) {
 	case "a":
 		networks := aNetworks(m)
 		if ipInNetworks(clientIP, networks) {
-			return m.Result, nil
+			return m.mechReturn()
 		}
 	case "mx":
 		networks := mxNetworks(m)
 		if ipInNetworks(clientIP, networks) {
-			return m.Result, nil
+			return m.mechReturn()
 		}
 	case "ptr":
 		if testPTR(m, client) {
-			return m.Result, nil
+			return m.mechReturn()
 		}
 	case "redirect":
 		return "", errors.New("redirect mechanism is not fully supported.")
@@ -152,7 +152,7 @@ func (m *Mechanism) Evaluate(client string) (string, error) {
 		network, err := networkCIDR(m.Domain, m.Prefix)
 		if err == nil {
 			if network.Contains(clientIP) {
-				return m.Result, nil
+				return m.mechReturn()
 			}
 		}
 	}
@@ -329,6 +329,12 @@ func parseMechanism(str, domain string, m *Mechanism) {
 	pi := strings.Index(str, "/")
 
 	switch {
+	case ci != -1 && pi != -1 && pi <= ci: // malformed mechanism
+		m.Result = "PermFail"
+	case ci == len(str)-1 || ei == len(str)-1 || pi == len(str)-1: // malformed mechanism
+		m.Result = "PermFail"
+	case ci == 0 || ei == 0 || pi == 0:
+		m.Result = "PermFail"
 	case ci != -1 && pi != -1: // name:domain/prefix
 		m.Name = str[:ci]
 		m.Domain = str[ci+1 : pi]
@@ -347,6 +353,14 @@ func parseMechanism(str, domain string, m *Mechanism) {
 		m.Name = str
 		m.Domain = domain
 	}
+}
+
+func (m *Mechanism) mechReturn() (string, error) {
+	if m.Result == "PermFail" {
+		return m.Result, ErrPermFail
+	}
+
+	return m.Result, nil
 }
 
 func networkCIDR(addr, prefix string) (*net.IPNet, error) {

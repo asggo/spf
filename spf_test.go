@@ -55,16 +55,16 @@ func TestNewMechanism(t *testing.T) {
 		actual := NewMechanism(expected.raw, domain)
 
 		if expected.name != actual.Name {
-			t.Error("Expected", expected.name, "got", actual.Name, ":", expected.raw)
+			t.Error("Expected name", expected.name, "got", actual.Name, ":", expected.raw)
 		}
 		if expected.domain != actual.Domain {
-			t.Error("Expected", expected.domain, "got", actual.Domain, ":", expected.raw)
+			t.Error("Expected domain", expected.domain, "got", actual.Domain, ":", expected.raw)
 		}
 		if expected.prefix != actual.Prefix {
-			t.Error("Expected", expected.prefix, "got", actual.Prefix, ":", expected.raw)
+			t.Error("Expected prefix", expected.prefix, "got", actual.Prefix, ":", expected.raw)
 		}
 		if expected.result != actual.Result {
-			t.Error("Expected", expected.prefix, "got", actual.Prefix, ":", expected.raw)
+			t.Error("Expected result", expected.result, "got", actual.Result, ":", expected.raw)
 		}
 	}
 }
@@ -74,13 +74,21 @@ func TestNewSPF(t *testing.T) {
 		spferror{"google.com", "somestring"},
 		spferror{"google.com", "v=spf1 include:_spf.google.com ~all -none"},
 		spferror{"google.com", "v=spf1 include:google.com"},
+		spferror{"google.com", "v=spf1 ip4:"},
+		spferror{"google.com", "v=spf1 include:"},
+		spferror{"google.com", "v=spf1 ip4:127.0.0.1/"},
+		spferror{"google.com", "v=spf1 ip4:/"},
+		spferror{"google.com", "v=spf1 ip4/:"},
+		spferror{"google.com", "v=spf1 /:"},
+		spferror{"google.com", "v=spf1 :/"},
 	}
 
 	for _, expected := range errorTests {
 		_, err := NewSPF(expected.domain, expected.raw)
 
 		if err == nil {
-			t.Error("Expected error got nil")
+			t.Logf("analyzing \"%s\"", expected.raw)
+			t.Error("Expected error, got nil")
 		}
 	}
 }
