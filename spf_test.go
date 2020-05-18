@@ -11,7 +11,7 @@ type mechtest struct {
 	name   string
 	domain string
 	prefix string
-	result string
+	result Result
 }
 
 type spferror struct {
@@ -22,7 +22,7 @@ type spferror struct {
 type spftest struct {
 	server string
 	email  string
-	result string
+	result Result
 }
 
 type spfstr struct {
@@ -32,23 +32,23 @@ type spfstr struct {
 
 func TestNewMechanism(t *testing.T) {
 	tests := []mechtest{
-		mechtest{"+all", "all", domain, "", "Pass"},
-		mechtest{"-ip6:1080::8:800:68.0.3.1", "ip6", "1080::8:800:68.0.3.1", "", "Fail"},
-		mechtest{"~ip6:1080::8:800:68.0.3.1/96", "ip6", "1080::8:800:68.0.3.1", "96", "SoftFail"},
-		mechtest{"?ip4:192.168.0.1", "ip4", "192.168.0.1", "", "Neutral"},
-		mechtest{"ip4:192.168.0.1/16", "ip4", "192.168.0.1", "16", "Pass"},
-		mechtest{"-a", "a", domain, "", "Fail"},
-		mechtest{"~a/24", "a", domain, "24", "SoftFail"},
-		mechtest{"?a:offsite.example.com", "a", "offsite.example.com", "", "Neutral"},
-		mechtest{"a:offsite.example.com/24", "a", "offsite.example.com", "24", "Pass"},
-		mechtest{"mx", "mx", domain, "", "Pass"},
-		mechtest{"mx/24", "mx", domain, "24", "Pass"},
-		mechtest{"mx:deferrals.domain.com", "mx", "deferrals.domain.com", "", "Pass"},
-		mechtest{"mx:deferrals.domain.com/24", "mx", "deferrals.domain.com", "24", "Pass"},
-		mechtest{"ptr", "ptr", domain, "", "Pass"},
-		mechtest{"ptr:domain.name", "ptr", "domain.name", "", "Pass"},
-		mechtest{"include:domain.name", "include", "domain.name", "", "Pass"},
-		mechtest{"exists:domain.name", "exists", "domain.name", "", "Pass"},
+		mechtest{"+all", "all", domain, "", Pass},
+		mechtest{"-ip6:1080::8:800:68.0.3.1", "ip6", "1080::8:800:68.0.3.1", "", Fail},
+		mechtest{"~ip6:1080::8:800:68.0.3.1/96", "ip6", "1080::8:800:68.0.3.1", "96", SoftFail},
+		mechtest{"?ip4:192.168.0.1", "ip4", "192.168.0.1", "", Neutral},
+		mechtest{"ip4:192.168.0.1/16", "ip4", "192.168.0.1", "16", Pass},
+		mechtest{"-a", "a", domain, "", Fail},
+		mechtest{"~a/24", "a", domain, "24", SoftFail},
+		mechtest{"?a:offsite.example.com", "a", "offsite.example.com", "", Neutral},
+		mechtest{"a:offsite.example.com/24", "a", "offsite.example.com", "24", Pass},
+		mechtest{"mx", "mx", domain, "", Pass},
+		mechtest{"mx/24", "mx", domain, "24", Pass},
+		mechtest{"mx:deferrals.domain.com", "mx", "deferrals.domain.com", "", Pass},
+		mechtest{"mx:deferrals.domain.com/24", "mx", "deferrals.domain.com", "24", Pass},
+		mechtest{"ptr", "ptr", domain, "", Pass},
+		mechtest{"ptr:domain.name", "ptr", "domain.name", "", Pass},
+		mechtest{"include:domain.name", "include", "domain.name", "", Pass},
+		mechtest{"exists:domain.name", "exists", "domain.name", "", Pass},
 	}
 
 	for _, expected := range tests {
@@ -87,8 +87,8 @@ func TestNewSPF(t *testing.T) {
 
 func TestSPFTest(t *testing.T) {
 	tests := []spftest{
-		spftest{"127.0.0.1", "info@google.com", "SoftFail"},
-		spftest{"74.125.141.26", "info@google.com", "Pass"},
+		spftest{"127.0.0.1", "info@google.com", SoftFail},
+		spftest{"74.125.141.26", "info@google.com", Pass},
 	}
 
 	for _, expected := range tests {
