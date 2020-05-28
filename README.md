@@ -4,7 +4,7 @@
 
 Package spf parses an SPF record and determines if a given IP address
 is allowed to send email based on that record. SPF handles all of the
-mechanisms defined at http://www.openspf.org/SPF_Record_Syntax.
+mechanisms defined at http://www.open-spf.org/SPF_Record_Syntax/.
 
 ## Example
 
