@@ -26,7 +26,7 @@ type SPF struct {
 	Raw        string
 	Domain     string
 	Version    string
-	Mechanisms []*Mechanism
+	Mechanisms []Mechanism
 }
 
 // Test evaluates each mechanism to determine the result for the client.
@@ -123,7 +123,11 @@ func NewSPF(domain, record string) (SPF, error) {
 		case strings.HasPrefix(f, "v="):
 			spf.Version = f[2:]
 		default:
-			mechanism := NewMechanism(f, domain)
+			mechanism, err := NewMechanism(f, domain)
+
+			if err != nil {
+				return spf, err
+			}
 
 			if !mechanism.Valid() {
 				return spf, ErrInvalidMechanism

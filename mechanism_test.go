@@ -12,6 +12,27 @@ type mechtest struct {
 	result Result
 }
 
+func TestValidMechanism(t *testing.T) {
+	tests := []string{
+		"ip4:",
+ 		"include:",
+ 		"ip4:127.0.0.1/",
+ 		"ip4:/",
+ 		"ip4/:",
+ 	    "/:",
+ 		":/",
+		"redirect=",
+		"=",
+	}
+
+	for _, expected := range tests {
+		_, err := NewMechanism(expected, "domain")
+		if err == nil {
+			t.Log("Analyzing", expected)
+			t.Error("Expecting invalid mechanism")
+		}
+	}
+}
 
 func TestNewMechanism(t *testing.T) {
 	tests := []mechtest{
@@ -32,10 +53,11 @@ func TestNewMechanism(t *testing.T) {
 		mechtest{"ptr:domain.name", "ptr", "domain.name", "", Pass},
 		mechtest{"include:domain.name", "include", "domain.name", "", Pass},
 		mechtest{"exists:domain.name", "exists", "domain.name", "", Pass},
+		mechtest{"redirect:domain.name", "redirect", "domain.name", "", Pass},
 	}
 
 	for _, expected := range tests {
-		actual := NewMechanism(expected.raw, domain)
+		actual, _ := NewMechanism(expected.raw, domain)
 
 		if expected.name != actual.Name {
 			t.Error("Expected", expected.name, "got", actual.Name, ":", expected.raw)

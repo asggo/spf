@@ -74,20 +74,25 @@ func (m *Mechanism) SPFString() string {
 
 	tag := m.ResultTag()
 
-	if m.Name != "all" && tag != "+" {
-		buf.WriteString(tag)
-	} else if m.Name == "all" {
-		buf.WriteString(tag)
-	}
+	switch m.Name {
+	case "redirect":
+		buf.WriteString(fmt.Sprintf("%s=%s", m.Name, m.Domain))
+	case "all":
+		buf.WriteString(fmt.Sprintf("%s%s", tag, m.Name))
+	default:
+		if tag != "+" {
+			buf.WriteString(tag)
+		}
 
-	buf.WriteString(m.Name)
+		buf.WriteString(m.Name)
 
-	if len(m.Domain) != 0 && m.Name != "all" {
-		buf.WriteString(fmt.Sprintf(":%s", m.Domain))
-	}
+		if len(m.Domain) != 0 {
+			buf.WriteString(fmt.Sprintf(":%s", m.Domain))
+		}
 
-	if len(m.Prefix) != 0 {
-		buf.WriteString(fmt.Sprintf("/%s", m.Prefix))
+		if len(m.Prefix) != 0 {
+			buf.WriteString(fmt.Sprintf("/%s", m.Prefix))
+		}
 	}
 
 	return buf.String()
@@ -107,7 +112,7 @@ func (m *Mechanism) Valid() bool {
 	}
 
 	switch m.Name {
-	case "all", "a", "mx", "ip4", "ip6", "exists", "include", "ptr":
+	case "all", "a", "mx", "ip4", "ip6", "exists", "include", "ptr", "redirect":
 		hasName = true
 	default:
 		hasName = false
@@ -138,6 +143,19 @@ func (m *Mechanism) Evaluate(ip string) (Result, error) {
 		if err == nil {
 			return m.Result, nil
 		}
+	case "redirect":
+		spf, err := NewSPF(m.Domain, "")
+
+		// There is no clear definition of what to do with errors on a
+		// redirected domain. Trying to make wise choices here.
+		switch err {
+		case ErrFailedLookup:
+			return TempError, nil
+		default:
+			return PermError, nil
+		}
+
+		return spf.Test(ip), nil
 	case "include":
 		spf, err := NewSPF(m.Domain, "")
 
@@ -183,48 +201,79 @@ func (m *Mechanism) Evaluate(ip string) (Result, error) {
 // NewMechanism creates a new Mechanism struct using the given string and
 // domain name. When the mechanism does not define the domain, the provided
 // domain is used as the default.
-func NewMechanism(str, domain string) *Mechanism {
-	m := new(Mechanism)
+func NewMechanism(str, domain string) (Mechanism, error) {
+	var m Mechanism
+	var err error
 
 	switch string(str[0]) {
 	case "-":
-		m.Result = Fail
-		parseMechanism(str[1:], domain, m)
+		m, err = parseMechanism(Fail, str[1:], domain)
 	case "~":
-		m.Result = SoftFail
-		parseMechanism(str[1:], domain, m)
+		m, err = parseMechanism(SoftFail, str[1:], domain)
 	case "+":
-		m.Result = Pass
-		parseMechanism(str[1:], domain, m)
+		m, err = parseMechanism(Pass, str[1:], domain)
 	case "?":
-		m.Result = Neutral
-		parseMechanism(str[1:], domain, m)
+		m, err = parseMechanism(Neutral, str[1:], domain)
 	default:
-		m.Result = Pass
-		parseMechanism(str, domain, m)
+		m, err = parseMechanism(Pass, str, domain)
 	}
 
-	return m
+	return m, err
 }
 
-func parseMechanism(str, domain string, m *Mechanism) {
+func parseMechanism(r Result, str, domain string) (Mechanism, error) {
+	var m Mechanism
+	var n string
+	var d string
+	var p string
+
 	ci := strings.Index(str, ":")
 	pi := strings.Index(str, "/")
+	ei := strings.Index(str, "=")
 
 	switch {
-	case ci != -1 && pi != -1: // name:domain/prefix
-		m.Name = str[:ci]
-		m.Domain = str[ci+1 : pi]
-		m.Prefix = str[pi+1:]
+	case ei != -1:
+		n = str[:ei]
+		d = str[ei+1:]
+
+		// Domain should not be empty
+		if d == "" {
+			return m, ErrInvalidMechanism
+		}
+	case ci != -1 && pi != -1 && ci < pi: // name:domain/prefix
+		n = str[:ci]
+		d = str[ci+1 : pi]
+		p = str[pi+1:]
+
+		// Domain and prefix should not be empty
+		if d == "" || p == "" {
+			return m, ErrInvalidMechanism
+		}
 	case ci != -1: // name:domain
-		m.Name = str[:ci]
-		m.Domain = str[ci+1:]
+		n = str[:ci]
+		d = str[ci+1:]
+		// Domain should not be empty
+		if d == "" {
+			return m, ErrInvalidMechanism
+		}
 	case pi != -1: // name/prefix
-		m.Name = str[:pi]
-		m.Domain = domain
-		m.Prefix = str[pi+1:]
+		n = str[:pi]
+		d = domain
+		p = str[pi+1:]
+
+		// Prefix should not be empty
+		if p == "" {
+			return m, ErrInvalidMechanism
+		}
 	default: // name
-		m.Name = str
-		m.Domain = domain
+		n = str
+		d = domain
 	}
+
+	m.Result = r
+	m.Domain = d
+	m.Name = n
+	m.Prefix = p
+
+	return m, nil
 }
