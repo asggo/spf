@@ -20,6 +20,10 @@ const (
 	PermError Result = "PermError"
 )
 
+var (
+	ErrNoMatch = errors.New("Client was not covered by the mechanism.")
+)
+
 // Mechanism represents a single mechanism in an SPF record.
 type Mechanism struct {
 	Name   string
@@ -135,8 +139,21 @@ func (m *Mechanism) Evaluate(ip string) (Result, error) {
 			return m.Result, nil
 		}
 	case "include":
-		email := "info@" + m.Domain
-		return SPFTest(ip, email)
+		spf, err := NewSPF(m.Domain, "")
+
+		// If there is no SPF record for the included domain it is considered
+		// a PermError. Any other error is ok to ignore.
+		if err == ErrNoRecord {
+			return PermError, nil
+		}
+
+		// The include statment is meant to be used as an if-pass or on-pass
+		// statement. Meaning if we get a result other than Pass, it is ok to
+		// ignore it and move on to the other mechanisms.
+		result := spf.Test(ip)
+		if result == Pass {
+			return result, nil
+		}
 	case "a":
 		networks := aNetworks(m)
 		if ipInNetworks(parsedIP, networks) {
@@ -160,7 +177,7 @@ func (m *Mechanism) Evaluate(ip string) (Result, error) {
 		}
 	}
 
-	return None, errors.New("Client was not covered by the mechanism.")
+	return None, ErrNoMatch
 }
 
 // NewMechanism creates a new Mechanism struct using the given string and

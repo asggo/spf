@@ -12,6 +12,14 @@ import (
 	"strings"
 )
 
+var (
+	ErrNoRecord = errors.New("No SPF Record found.")
+	ErrFailedLookup = errors.New("DNS Lookup failed.")
+	ErrInvalidSPF = errors.New("Invalid SPF string.")
+	ErrIncludeLoop = errors.New("Include loop detected.")
+	ErrInvalidMechanism = errors.New("Invalid mechanism in SPF string")
+)
+
 // SPF represents an SPF record for a particular Domain. The SPF record
 // holds all of the Allow, Deny, and Neutral mechanisms.
 type SPF struct {
@@ -65,16 +73,49 @@ func (s *SPF) SPFString() string {
 	return buf.String()
 }
 
+func getSPFRecord(domain string) (string, error) {
+	var spfText string
+
+	// DNS errors during domain name lookup should result in "TempError".
+	records, err := net.LookupTXT(domain)
+	if err != nil {
+		return "", ErrFailedLookup
+	}
+
+	// Find the SPF record among the TXT records for the domain.
+	for _, record := range records {
+		if strings.HasPrefix(record, "v=spf1") {
+			spfText = record
+			break
+		}
+	}
+
+	return spfText, nil
+}
+
 // Create a new SPF record for the given domain using the provided string. If
 // the provided string is not valid an error is returned.
-func NewSPF(domain, record string) (*SPF, error) {
-	spf := new(SPF)
+func NewSPF(domain, record string) (SPF, error) {
+	var spf SPF
+
+	if record == "" {
+		spfText, err := getSPFRecord(domain)
+		if err != nil {
+			return spf, err
+		}
+
+		if spfText == "" {
+			return spf, ErrNoRecord
+		}
+
+		record = spfText
+	}
 
 	spf.Raw = record
 	spf.Domain = domain
 
 	if !strings.HasPrefix(record, "v=spf1") {
-		return spf, errors.New(fmt.Sprintf("Invalid SPF string: %s", record))
+		return spf, ErrInvalidSPF
 	}
 
 	for _, f := range strings.Fields(record) {
@@ -85,12 +126,12 @@ func NewSPF(domain, record string) (*SPF, error) {
 			mechanism := NewMechanism(f, domain)
 
 			if !mechanism.Valid() {
-				return spf, errors.New(fmt.Sprintf("Invalid mechanism in SPF string: %s", f))
+				return spf, ErrInvalidMechanism
 			}
 
 			if mechanism.Name == "include" {
 				if mechanism.Domain == domain {
-					return spf, fmt.Errorf("include loop detected")
+					return spf, ErrIncludeLoop
 				}
 			}
 
@@ -111,7 +152,6 @@ Exported functions.
 // Pass, Fail, SoftFail, Neutral, None, TempError, or PermError
 func SPFTest(ip, email string) (Result, error) {
 	var domain string
-	var spfText string
 
 	// Get domain name from email address.
 	if strings.Contains(email, "@") {
@@ -121,18 +161,9 @@ func SPFTest(ip, email string) (Result, error) {
 		return None, errors.New("Email address must contain an @ sign.")
 	}
 
-	// DNS errors during domain name lookup should result in "TempError".
-	records, err := net.LookupTXT(domain)
+	spfText, err := getSPFRecord(domain)
 	if err != nil {
 		return TempError, err
-	}
-
-	// Find the SPF record among the TXT records for the domain.
-	for _, record := range records {
-		if strings.HasPrefix(record, "v=spf1") {
-			spfText = record
-			break
-		}
 	}
 
 	// No SPF record should result in None.
