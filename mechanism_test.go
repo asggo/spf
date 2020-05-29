@@ -15,12 +15,12 @@ type mechtest struct {
 func TestValidMechanism(t *testing.T) {
 	tests := []string{
 		"ip4:",
- 		"include:",
- 		"ip4:127.0.0.1/",
- 		"ip4:/",
- 		"ip4/:",
- 	    "/:",
- 		":/",
+		"include:",
+		"ip4:127.0.0.1/",
+		"ip4:/",
+		"ip4/:",
+		"/:",
+		":/",
 		"redirect=",
 		"=",
 	}

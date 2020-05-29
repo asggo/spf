@@ -12,12 +12,17 @@ import (
 	"strings"
 )
 
+const (
+	MaxCount = 10
+)
+
 var (
-	ErrNoRecord = errors.New("No SPF Record found.")
-	ErrFailedLookup = errors.New("DNS Lookup failed.")
-	ErrInvalidSPF = errors.New("Invalid SPF string.")
-	ErrIncludeLoop = errors.New("Include loop detected.")
-	ErrInvalidMechanism = errors.New("Invalid mechanism in SPF string")
+	ErrNoRecord         = errors.New("No SPF Record found.")
+	ErrFailedLookup     = errors.New("DNS Lookup failed.")
+	ErrInvalidSPF       = errors.New("Invalid SPF string.")
+	ErrIncludeLoop      = errors.New("Include loop detected.")
+	ErrInvalidMechanism = errors.New("Invalid mechanism in SPF string.")
+	ErrMaxCount         = errors.New("Exceeded maximum lookups.")
 )
 
 // SPF represents an SPF record for a particular Domain. The SPF record
@@ -27,6 +32,7 @@ type SPF struct {
 	Domain     string
 	Version    string
 	Mechanisms []Mechanism
+	Count      int
 }
 
 // Test evaluates each mechanism to determine the result for the client.
@@ -35,7 +41,7 @@ type SPF struct {
 // is returned.
 func (s *SPF) Test(ip string) Result {
 	for _, m := range s.Mechanisms {
-		result, err := m.Evaluate(ip)
+		result, err := m.Evaluate(ip, s.Count)
 		if err == nil {
 			return result
 		}
@@ -95,7 +101,7 @@ func getSPFRecord(domain string) (string, error) {
 
 // Create a new SPF record for the given domain using the provided string. If
 // the provided string is not valid an error is returned.
-func NewSPF(domain, record string) (SPF, error) {
+func NewSPF(domain, record string, count int) (SPF, error) {
 	var spf SPF
 
 	if record == "" {
@@ -111,6 +117,7 @@ func NewSPF(domain, record string) (SPF, error) {
 		record = spfText
 	}
 
+	spf.Count = count
 	spf.Raw = record
 	spf.Domain = domain
 
@@ -133,14 +140,24 @@ func NewSPF(domain, record string) (SPF, error) {
 				return spf, ErrInvalidMechanism
 			}
 
-			if mechanism.Name == "include" {
+			switch mechanism.Name {
+			case "include":
+				spf.Count = spf.Count + 1
 				if mechanism.Domain == domain {
 					return spf, ErrIncludeLoop
 				}
+			case "redirect", "exists", "a", "mx", "ptr":
+				spf.Count = spf.Count + 1
+			default:
+				// No action
 			}
 
 			spf.Mechanisms = append(spf.Mechanisms, mechanism)
 		}
+	}
+
+	if spf.Count >= MaxCount {
+		return spf, ErrMaxCount
 	}
 
 	return spf, nil
@@ -176,7 +193,7 @@ func SPFTest(ip, email string) (Result, error) {
 	}
 
 	// Create a new SPF struct
-	spf, err := NewSPF(domain, spfText)
+	spf, err := NewSPF(domain, spfText, 0)
 	if err != nil {
 		return PermError, err
 	}

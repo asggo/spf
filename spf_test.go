@@ -30,7 +30,7 @@ func TestNewSPF(t *testing.T) {
 	}
 
 	for _, expected := range errorTests {
-		_, err := NewSPF(expected.domain, expected.raw)
+		_, err := NewSPF(expected.domain, expected.raw, 0)
 
 		if err == nil {
 			t.Log("Analyzing:", expected.raw)
@@ -46,6 +46,7 @@ func TestSPFTest(t *testing.T) {
 		spftest{"35.190.247.0", "info@google.com", Pass},
 		spftest{"172.217.0.0", "info@_netblocks3.google.com", Pass},
 		spftest{"172.217.0.0", "info@google.com", Pass},
+		spftest{"1.1.1.1", "admin@pchome.com.tw", PermError},
 	}
 
 	for _, expected := range tests {
@@ -71,13 +72,13 @@ func TestSPFString(t *testing.T) {
 			"v=spf1 ip4:127.0.0.0/8 -ip4:127.0.0.1 ?ip4:127.0.0.2 -all",
 		},
 		spfstr{
- 			"v=spf1 redirect=_spf.sample.invalid",
- 			"v=spf1 redirect=_spf.sample.invalid",
- 		},
+			"v=spf1 redirect=_spf.sample.invalid",
+			"v=spf1 redirect=_spf.sample.invalid",
+		},
 	}
 
 	for _, tcase := range tests {
-		s, err := NewSPF("domain", tcase.raw)
+		s, err := NewSPF("domain", tcase.raw, 0)
 		if err != nil {
 			t.Log("Analyzing", tcase.raw)
 			t.Error(err)
