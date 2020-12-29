@@ -149,11 +149,13 @@ func (m *Mechanism) Evaluate(ip string, count int) (Result, error) {
 
 		// There is no clear definition of what to do with errors on a
 		// redirected domain. Trying to make wise choices here.
+		if err != nil {
 		switch err {
-		case ErrFailedLookup:
-			return TempError, nil
-		default:
-			return PermError, nil
+			case ErrFailedLookup:
+				return TempError, nil
+			default:
+				return PermError, nil
+			}
 		}
 
 		return spf.Test(ip), nil
