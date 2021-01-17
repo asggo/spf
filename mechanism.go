@@ -150,6 +150,8 @@ func (m *Mechanism) Evaluate(ip string, count int) (Result, error) {
 		// There is no clear definition of what to do with errors on a
 		// redirected domain. Trying to make wise choices here.
 		switch err {
+		case nil:
+			break
 		case ErrFailedLookup:
 			return TempError, nil
 		default:
